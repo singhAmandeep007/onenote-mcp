@@ -20,6 +20,23 @@ const __dirname = path.dirname(__filename);
 // Path for storing the access token
 const tokenFilePath = path.join(__dirname, '.access-token.txt');
 
+// Strip an optional "Bearer " prefix and surrounding whitespace from a token.
+function normalizeAccessToken(value) {
+  if (!value) return null;
+  let token = String(value).trim();
+  if (token.toLowerCase().startsWith('bearer ')) {
+    token = token.slice(7).trim();
+  }
+  return token;
+}
+
+// A valid Microsoft Graph access token is a JWT: three base64url parts split by '.'.
+// Personal-account tokens minted with the wrong scopes come back as a compact
+// (non-JWT) string that Graph rejects with 401/40001.
+function isLikelyJwt(token) {
+  return typeof token === 'string' && token.split('.').length === 3;
+}
+
 // Create the MCP server
 const server = new McpServer(
   { 
@@ -63,7 +80,18 @@ let graphClient = null;
 
 // Client ID for Microsoft Graph API access
 const clientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'; // Microsoft Graph Explorer client ID
-const scopes = ['Notes.Read.All', 'Notes.ReadWrite.All', 'User.Read'];
+
+// 'common' accepts BOTH personal Microsoft accounts (MSA) and work/school (Azure AD).
+const tenantId = process.env.GRAPH_TENANT || 'common';
+
+// Resource-qualified, NON-".All" delegated scopes. Personal accounts cannot consent
+// to ".All" scopes, which yields a token Graph rejects (401/40001). These work for all
+// account types and cover reading/writing the signed-in user's own OneNote content.
+const scopes = [
+  'https://graph.microsoft.com/Notes.Read',
+  'https://graph.microsoft.com/Notes.ReadWrite',
+  'https://graph.microsoft.com/User.Read'
+];
 
 // Function to ensure Graph client is created
 async function ensureGraphClient() {
@@ -80,19 +108,26 @@ async function ensureGraphClient() {
           // Fall back to using the raw token (old format)
           accessToken = tokenData;
         }
+        accessToken = normalizeAccessToken(accessToken);
       }
     } catch (error) {
       console.error("Error reading token file:", error);
     }
 
     if (!accessToken) {
-      throw new Error("Access token not found. Please save access token first.");
+      throw new Error("Access token not found. Please authenticate first (run 'npm run auth' or use the 'authenticate' tool).");
     }
 
-    // Create Microsoft Graph client
-    graphClient = Client.init({
-      authProvider: (done) => {
-        done(null, accessToken);
+    // Personal Microsoft accounts return compact (non-JWT) Graph tokens — that's normal
+    // and valid. Only warn; let Microsoft Graph be the authority on token validity.
+    if (!isLikelyJwt(accessToken)) {
+      console.error("Note: access token is a compact (non-JWT) token — normal for personal Microsoft accounts. Proceeding.");
+    }
+
+    // Create Microsoft Graph client (middleware-based auth provider)
+    graphClient = Client.initWithMiddleware({
+      authProvider: {
+        getAccessToken: async () => accessToken
       }
     });
   }
@@ -115,6 +150,7 @@ async function createGraphClient() {
     // Use device code flow
     const credential = new DeviceCodeCredential({
       clientId: clientId,
+      tenantId: tenantId,
       userPromptCallback: (info) => {
         // This will be shown to the user with the URL and code
         console.error('\n' + info.message);
@@ -186,7 +222,11 @@ server.tool(
   async (params) => {
     try {
       // Save the token for future use
-      accessToken = params.random_string;
+      const candidate = normalizeAccessToken(params.random_string);
+      if (!candidate) {
+        throw new Error("No token provided. Use the 'authenticate' tool or 'npm run auth' to obtain one.");
+      }
+      accessToken = candidate;
       const tokenData = JSON.stringify({ token: accessToken });
       fs.writeFileSync(tokenFilePath, tokenData);
       await createGraphClient();
