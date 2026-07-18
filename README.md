@@ -92,7 +92,8 @@ The first time you ask about OneNote, the AI will guide you through the authenti
 
 ### Prerequisites
 
-- Node.js 16 or higher (install from [nodejs.org](https://nodejs.org/))
+- Node.js 18 or higher (install from [nodejs.org](https://nodejs.org/)). An `.nvmrc` is
+  included, so `nvm use` will select the recommended version.
 - An active Microsoft account with access to OneNote
 - Git (install from [git-scm.com](https://git-scm.com/))
 
@@ -103,25 +104,16 @@ git clone https://github.com/yourusername/onenote-mcp.git
 cd onenote-mcp
 ```
 
-### Step 2: Download the TypeScript SDK
-
-This project requires the MCP TypeScript SDK, which needs to be downloaded separately:
-
-```bash
-git clone https://github.com/modelcontextprotocol/typescript-sdk.git
-cd typescript-sdk
-npm install
-npm run build
-cd ..
-```
-
-### Step 3: Install Project Dependencies
+### Step 2: Install Project Dependencies
 
 ```bash
 npm install
 ```
 
-### Step 4: Start the MCP Server
+> The MCP TypeScript SDK is now installed automatically as the published
+> `@modelcontextprotocol/sdk` npm package — no separate clone or build step is required.
+
+### Step 3: Start the MCP Server
 
 ```bash
 npm start
@@ -134,7 +126,7 @@ Use the "authenticate" tool to start the authentication flow,
 or use "saveAccessToken" if you already have a token.
 ```
 
-### Step 5: Authenticate Through Your AI Assistant
+### Step 4: Authenticate Through Your AI Assistant
 
 Once the server is running, you can authenticate directly through your AI assistant:
 
@@ -272,9 +264,9 @@ If you still hit this error:
 
 ### Server Won't Start
 
-- Verify Node.js is installed (version 16+): `node --version`
+- Verify Node.js is installed (version 18+): `node --version` (run `nvm use` to match `.nvmrc`)
 - Make sure all dependencies are installed: `npm install`
-- Check that the TypeScript SDK was built correctly
+- If you see an error resolving `@modelcontextprotocol/sdk`, re-run `npm install` to pull the published package
 
 ### AI Can't Connect to the Server
 
