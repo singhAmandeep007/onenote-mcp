@@ -151,6 +151,20 @@ Once the server is running, you can authenticate directly through your AI assist
 
 4. After successful authentication, you can start using OneNote with your AI assistant
 
+> **Tip:** After authenticating you can confirm the token actually works by running
+> `node verify-token.js`. It calls Microsoft Graph directly and lists your notebooks,
+> so you know the connection is good before wiring it into your AI assistant.
+
+### A note on account types
+
+Both **personal** Microsoft accounts (outlook.com/hotmail/live) and **work or school**
+(Azure AD) accounts are supported — authentication uses the `common` tenant by default.
+You can restrict this with the `GRAPH_TENANT` environment variable
+(`consumers` = personal only, `organizations` = work/school only, or a specific tenant ID).
+
+Personal accounts receive a **compact (non-JWT) access token** from Microsoft Graph, while
+work/school accounts receive a JWT. Both are valid — the server accepts either.
+
 ## Available MCP Tools
 
 Once authenticated, the following tools are available for AI assistants to use:
@@ -211,6 +225,9 @@ For testing or development purposes, you can also use the provided scripts direc
 # Authenticate with Microsoft
 npm run auth
 
+# Verify the saved token works against Microsoft Graph
+node verify-token.js
+
 # List your notebooks
 npm run list-notebooks
 
@@ -237,6 +254,21 @@ node read-all-pages.js
 - If authentication fails, make sure you're using a modern browser without tracking prevention
 - Try clearing browser cookies and cache
 - If you get "expired_token" errors, restart the authentication process
+
+### "The request does not contain a valid authentication token" (HTTP 401, code 40001)
+
+This happens when the stored token was minted with the wrong Graph scopes — most often
+on a **personal Microsoft account**, which cannot consent to the `.All` scopes the older
+versions requested. The server now requests resource-qualified, non-`.All` delegated
+scopes (`Notes.Read`, `Notes.ReadWrite`, `User.Read`) against the `common` tenant, which
+works for both personal and work/school accounts.
+
+If you still hit this error:
+
+1. Delete the stale token: `rm .access-token.txt`
+2. Re-authenticate: `npm run auth`
+3. Confirm it works: `node verify-token.js` (should print your notebooks)
+4. Restart the MCP server / your AI assistant so it reloads the new token
 
 ### Server Won't Start
 
