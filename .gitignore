@@ -45,6 +45,9 @@ Thumbs.db
 .settings/
 *.sublime-workspace
 
+# Scratch / temp files
+__*
+
 # Cache and temp files
 .npm
 .eslintcache
