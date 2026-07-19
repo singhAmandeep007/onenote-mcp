@@ -1,266 +1,176 @@
 # OneNote MCP Server
 
-A Model Context Protocol (MCP) server implementation that enables AI language models like Claude and other LLMs to interact with Microsoft OneNote.
+A TypeScript [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that gives AI assistants (Claude, Cursor, etc.) read/write access to your Microsoft OneNote notebooks via the Microsoft Graph API.
 
-> This project is based on [azure-onenote-mcp-server](https://github.com/ZubeidHendricks/azure-onenote-mcp-server) by Zubeid Hendricks, with modifications to simplify authentication and improve usability.
+**Zero Azure setup required** — authentication uses the device-code flow with a pre-consented public client, so you only need a Microsoft account.
 
-## What Does This Do?
-
-This server allows AI assistants to:
-- Access your OneNote notebooks, sections, and pages
-- Create new pages in your notebooks
-- Search through your notes
-- Read complete note content, including HTML formatting and text
-- Analyze and summarize your notes directly
-
-All of this happens directly through the AI interface without you having to switch contexts.
-
-## Using with AI Assistants
-
-### Setup for Cursor
-
-1. Clone this repository and follow the installation steps below
-2. Start the MCP server: `npm start`
-3. Register the server in Cursor:
-   - Open Cursor preferences (Cmd+, on Mac or Ctrl+, on Windows)
-   - Go to the "MCP" tab
-   - Add a new MCP server with these settings:
-     - Name: `onenote` 
-     - Command: `node`
-     - Args: `["/path/to/your/onenote-mcp.mjs"]` (use absolute path)
-
-   Here's the complete JSON configuration example:
-   ```json
-   {
-     "mcpServers": {
-       "onenote": {
-         "command": "node",
-         "args": ["/absolute/path/to/your/onenote-mcp.mjs"],
-         "env": {}
-       }
-     }
-   }
-   ```
-   
-4. Restart Cursor
-5. In Cursor, you can now interact with your OneNote data using natural language:
-
-```
-Can you show me my OneNote notebooks?
-Create a new page in my first notebook with a summary of this conversation
-Find notes related to "project planning" in my OneNote
-```
-
-The first time you ask about OneNote, the AI will guide you through the authentication process.
-
-### Setup for Claude Desktop (or other MCP-compatible assistants)
-
-1. Clone this repository and follow the installation steps below
-2. Start the MCP server: `npm start`
-3. In the Claude Desktop settings, add the OneNote MCP server:
-   - Name: `onenote`
-   - Command: `node`
-   - Args: `["/path/to/your/onenote-mcp.mjs"]` (use absolute path)
-   
-   JSON configuration example:
-   ```json
-   {
-     "mcpServers": {
-       "onenote": {
-         "command": "node",
-         "args": ["/absolute/path/to/your/onenote-mcp.mjs"],
-         "env": {}
-       }
-     }
-   }
-   ```
-   
-4. You can now ask Claude to interact with your OneNote data
+> Based on [azure-onenote-mcp-server](https://github.com/ZubeidHendricks/azure-onenote-mcp-server) by Zubeid Hendricks.
 
 ## Features
 
-- Authentication with Microsoft OneNote using device code flow (no Azure setup needed)
-- List all notebooks, sections, and pages
-- Create new pages with HTML content
-- Read complete page content, including HTML formatting
-- Extract text content for AI analysis and summaries
-- Summarize content of all pages in a single operation
-- Read full content of all pages in a readable format
-- Search across your notes
+- Device-code authentication — works with both personal Microsoft accounts and work/school (Azure AD) accounts
+- List notebooks, sections, and pages
+- Read page content as plain text (HTML is stripped automatically)
+- Create pages with HTML content
+- Search pages by title across all notebooks
+- Typed Zod schemas on every MCP tool for reliable AI integration
+- Unified CLI for scripting and debugging (`onenote-cli`)
 
-## Installation
+## Prerequisites
 
-### Prerequisites
+- **Node.js ≥ 18.18** (see `.nvmrc`)
+- A Microsoft account with access to OneNote
 
-- Node.js 16 or higher (install from [nodejs.org](https://nodejs.org/))
-- An active Microsoft account with access to OneNote
-- Git (install from [git-scm.com](https://git-scm.com/))
-
-### Step 1: Clone the Repository
+## Quick Start
 
 ```bash
-git clone https://github.com/yourusername/onenote-mcp.git
+git clone https://github.com/danosb/onenote-mcp.git
 cd onenote-mcp
-```
-
-### Step 2: Download the TypeScript SDK
-
-This project requires the MCP TypeScript SDK, which needs to be downloaded separately:
-
-```bash
-git clone https://github.com/modelcontextprotocol/typescript-sdk.git
-cd typescript-sdk
 npm install
-npm run build
-cd ..
+npm run auth        # sign in with your Microsoft account
+npm run verify      # confirm the token works
 ```
 
-### Step 3: Install Project Dependencies
+## MCP Server Configuration
 
-```bash
-npm install
+Add the server to your AI assistant's MCP config. The server communicates over stdio.
+
+**Claude Desktop** (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "onenote": {
+      "command": "node",
+      "args": ["/absolute/path/to/onenote-mcp/dist/mcp-server.js"]
+    }
+  }
+}
 ```
 
-### Step 4: Start the MCP Server
+**Cursor** (Settings → MCP):
 
-```bash
-npm start
+```json
+{
+  "mcpServers": {
+    "onenote": {
+      "command": "node",
+      "args": ["/absolute/path/to/onenote-mcp/dist/mcp-server.js"]
+    }
+  }
+}
 ```
 
-This will start the MCP server, and you'll see a message:
-```
-Server started successfully.
-Use the "authenticate" tool to start the authentication flow,
-or use "saveAccessToken" if you already have a token.
-```
-
-### Step 5: Authenticate Through Your AI Assistant
-
-Once the server is running, you can authenticate directly through your AI assistant:
-
-1. In Cursor, Anthropic's Claude Desktop, or any MCP-compatible assistant, ask to authenticate with OneNote:
-   ```
-   Can you authenticate with my OneNote account?
-   ```
-
-2. The AI will trigger the authentication flow and provide you with:
-   - A URL (typically microsoft.com/devicelogin)
-   - A code to enter
-
-3. Go to the URL, enter the code, and sign in with your Microsoft account
-
-4. After successful authentication, you can start using OneNote with your AI assistant
+> **Tip:** For development, use `tsx src/mcp-server.ts` instead of `node dist/mcp-server.js` to skip the build step.
 
 ## Available MCP Tools
 
-Once authenticated, the following tools are available for AI assistants to use:
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `authenticate` | — | Start device-code sign-in flow |
+| `saveAccessToken` | `token` | Manually save an access token |
+| `listNotebooks` | — | List all notebooks |
+| `getNotebook` | `notebookId` | Get notebook details by ID |
+| `listSections` | `notebookId?` | List sections (all, or within a notebook) |
+| `listPages` | `sectionId?` | List pages (all, or within a section) |
+| `getPage` | `query` | Get page content by ID or title search |
+| `createPage` | `title`, `bodyHtml`, `sectionId?` | Create a page |
+| `searchPages` | `query` | Search pages by title |
 
-| Tool Name | Description |
-|-----------|-------------|
-| `authenticate` | Start the Microsoft authentication flow |
-| `listNotebooks` | Get a list of all your OneNote notebooks |
-| `getNotebook` | Get details of a specific notebook |
-| `listSections` | List all sections in a notebook |
-| `listPages` | List all pages in a section |
-| `getPage` | Get the complete content of a specific page, including HTML formatting |
-| `createPage` | Create a new page with HTML content |
-| `searchPages` | Search for pages across your notebooks |
+## CLI
 
-## Example Interactions
-
-Here are some examples of how you can interact with the OneNote MCP through your AI assistant:
-
-```
-User: Can you show me my OneNote notebooks?
-AI: (uses listNotebooks) I found 3 notebooks: "Work", "Personal", and "Projects"
-
-User: What sections are in my Projects notebook?
-AI: (uses listSections) Your Projects notebook has the following sections: "Active Projects", "Ideas", and "Completed"
-
-User: Create a new page in Projects with today's date as the title
-AI: (uses createPage) I've created a new page titled "2025-04-12" in your Projects notebook
-
-User: Find all my notes about machine learning
-AI: (uses searchPages) I found 5 pages with content related to machine learning...
-
-User: Can you read and summarize my notes on the "Project Requirements" page?
-AI: (uses getPage) Based on your "Project Requirements" page, here's a summary: The project requires Python 3.8+, integration with AWS services, and completion by Q3. Key deliverables include a web dashboard, API, and documentation...
-
-User: Extract all the action items from my "Team Meeting" notes
-AI: (uses getPage) Here are all the action items from your "Team Meeting" notes:
-1. John to complete API documentation by Friday
-2. Sarah to schedule design review meeting
-3. Team to finalize Q3 roadmap by end of month
-
-User: Summarize content of all my OneNote pages
-AI: (runs get-all-page-contents.js) Here's a summary of all your pages:
-- Questions: Contains strategic business questions about competitor analysis
-- 2025-04-12: Discussion about monetization strategy for bank transfers
-- Role Specification: Details about the Chief Payments Officer position
-...
-
-User: I want to read through all my OneNote pages so I can ask questions about them
-AI: (runs read-all-pages.js) I've retrieved the full content of all your pages in a readable format. Now you can ask me specific questions about any of the content.
-```
-
-## Advanced: Direct Script Usage
-
-For testing or development purposes, you can also use the provided scripts directly:
+A single CLI replaces the standalone scripts. Run via `npm run cli` or directly with `npx tsx src/cli.ts`.
 
 ```bash
-# Authenticate with Microsoft
-npm run auth
+npm run auth                         # device-code sign-in
+npm run verify                       # verify token against Graph API
 
-# List your notebooks
-npm run list-notebooks
-
-# List sections in your first notebook
-npm run list-sections
-
-# List pages in the first section
-npm run list-pages
-
-# Create a new page
-npm run create-page
-
-# Summarize content of all pages
-node get-all-page-contents.js
-
-# Read full content of all pages
-node read-all-pages.js
+npm run cli -- notebooks             # list notebooks
+npm run cli -- sections              # list all sections
+npm run cli -- sections --notebook <id>
+npm run cli -- pages                 # list all pages
+npm run cli -- pages --section <id>
+npm run cli -- get "page title"      # get page content as text
+npm run cli -- create --title "My Page" --body "<p>Hello</p>"
+npm run cli -- search "meeting"      # search by title
 ```
+
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm start` | Run the compiled MCP server |
+| `npm run dev` | Run the MCP server with `tsx` (no build needed) |
+| `npm run auth` | Device-code authentication |
+| `npm run verify` | Verify stored token |
+| `npm run cli` | Unified CLI (see above) |
+| `npm run typecheck` | Type-check without emitting |
+| `npm test` | Run tests with Vitest |
+| `npm run test:watch` | Run tests in watch mode |
+
+## Project Structure
+
+```
+src/
+  config.ts         — Client ID, tenant, scopes, paths
+  logger.ts         — stderr-only logging (MCP uses stdout for JSON-RPC)
+  token-store.ts    — Load/save/normalize access tokens
+  auth.ts           — Device-code authentication flow
+  graph-client.ts   — Microsoft Graph SDK client factory
+  html.ts           — HTML-to-text conversion (dependency-free)
+  onenote.ts        — Typed OneNote client (notebooks, sections, pages)
+  mcp-server.ts     — MCP server entry point with Zod-typed tools
+  cli.ts            — Unified CLI
+  index.ts          — Barrel export
+tests/
+  html.test.ts
+  token-store.test.ts
+  onenote.test.ts
+```
+
+## Authentication Details
+
+Authentication uses Microsoft's [device-code flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code) with the Graph Explorer public client ID. No Azure app registration is needed.
+
+The server requests these delegated scopes:
+
+- `Notes.Read` — read notebooks, sections, and pages
+- `Notes.ReadWrite` — create and modify pages
+- `User.Read` — verify the signed-in identity
+
+These are **delegated, non-`.All`** scopes, which is critical: personal Microsoft accounts cannot consent to `.All` (application-level) scopes, and requesting them produces a token that Graph rejects with HTTP 401.
+
+Tokens are cached in `.access-token.txt` with owner-only file permissions (`600`). Tokens expire after roughly one hour and need to be refreshed by re-running `npm run auth`.
+
+### Environment Variable Overrides
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GRAPH_CLIENT_ID` | Graph Explorer client ID | Your own Azure app registration |
+| `GRAPH_TENANT` | `common` | `consumers`, `organizations`, or a tenant ID |
+| `ONENOTE_TOKEN_PATH` | `.access-token.txt` | Custom token file location |
+| `GRAPH_ACCESS_TOKEN` | — | Provide a token directly (skips file) |
 
 ## Troubleshooting
 
-### Authentication Issues
+**401 / error code 40001** — You're likely requesting `.All` scopes, or your token has expired. Re-run `npm run auth`.
 
-- If authentication fails, make sure you're using a modern browser without tracking prevention
-- Try clearing browser cookies and cache
-- If you get "expired_token" errors, restart the authentication process
+**"Token is a compact (non-JWT) token"** — This is normal for personal Microsoft accounts. Personal accounts return opaque (non-JWT) access tokens that are perfectly valid for Graph API calls.
 
-### Server Won't Start
+**Server output corrupts the MCP stream** — All logging goes to stderr. If you add `console.log()` calls, the JSON-RPC protocol over stdout will break. Use `log()` from `src/logger.ts` instead.
 
-- Verify Node.js is installed (version 16+): `node --version`
-- Make sure all dependencies are installed: `npm install`
-- Check that the TypeScript SDK was built correctly
+## Security
 
-### AI Can't Connect to the Server
-
-- Ensure the MCP server is running (`npm start`)
-- Check your AI assistant's settings to make sure it's configured to use MCP
-- For Cursor, make sure it's the latest version that supports MCP
-
-## Security Notes
-
-- Authentication tokens are stored locally in `.access-token.txt`
-- Tokens grant access to your OneNote data, so keep them secure
-- Tokens expire after some time, requiring re-authentication
-- No Azure setup or API keys are required
+- Tokens are stored locally with `chmod 600` permissions
+- No credentials are sent to any third party
+- The public client ID has no client secret; authentication relies entirely on the user completing the device-code flow
+- `.access-token.txt` is in `.gitignore`
 
 ## Credits
 
-This project builds upon the [azure-onenote-mcp-server](https://github.com/ZubeidHendricks/azure-onenote-mcp-server) by Zubeid Hendricks, with a focus on simplifying the authentication process and improving the user experience with AI assistants.
+Built on [azure-onenote-mcp-server](https://github.com/ZubeidHendricks/azure-onenote-mcp-server) by Zubeid Hendricks.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details
+MIT — see [LICENSE](LICENSE) for details.

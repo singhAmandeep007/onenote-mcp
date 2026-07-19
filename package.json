@@ -1,33 +1,63 @@
 {
-  "name": "mcp-server-onenote",
-  "version": "0.1.0",
-  "description": "OneNote MCP Server Implementation with Device Code Authentication",
+  "name": "onenote-mcp",
+  "version": "2.0.0",
+  "description": "TypeScript MCP server for Microsoft OneNote with zero-Azure-setup device-code auth (personal and work/school accounts).",
   "type": "module",
-  "main": "onenote-mcp.mjs",
-  "scripts": {
-    "start": "node onenote-mcp.mjs",
-    "auth": "node authenticate.js",
-    "list-notebooks": "node simple-onenote.js",
-    "list-sections": "node list-sections.js",
-    "list-pages": "node list-pages.js",
-    "create-page": "node create-page.js"
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "onenote-mcp": "dist/mcp-server.js",
+    "onenote-cli": "dist/cli.js"
   },
-  "dependencies": {
-    "@azure/identity": "^2.1.0",
-    "@azure/msal-node": "^3.5.0",
-    "@microsoft/microsoft-graph-client": "^3.0.7",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "dotenv": "^16.0.0",
-    "jsdom": "^26.0.0",
-    "node-fetch": "^3.3.2",
-    "open": "^10.1.0"
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "start": "node dist/mcp-server.js",
+    "dev": "tsx src/mcp-server.ts",
+    "auth": "tsx src/cli.ts auth",
+    "verify": "tsx src/cli.ts verify",
+    "cli": "tsx src/cli.ts",
+    "list-notebooks": "tsx src/cli.ts notebooks",
+    "list-sections": "tsx src/cli.ts sections",
+    "list-pages": "tsx src/cli.ts pages",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "onenote",
-    "modelcontextprotocol",
-    "device-code-auth"
+    "microsoft-graph",
+    "typescript",
+    "device-code-auth",
+    "claude"
   ],
   "author": "Zubeid Hendricks",
-  "license": "MIT"
+  "contributors": [
+    "danosb"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@azure/identity": "^4.13.1",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@microsoft/microsoft-graph-types": "^2.40.0",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.9"
+  }
 }
