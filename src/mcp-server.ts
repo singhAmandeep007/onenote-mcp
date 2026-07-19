@@ -55,8 +55,9 @@ server.tool(
 server.tool(
   'saveAccessToken',
   'Manually save a Microsoft Graph access token for later use.',
-  { token: z.string().min(1).describe('The access token to save') },
-  async ({ token }) => {
+  { token: z.string().describe('The access token to save') },
+  // @ts-expect-error — TS2589: MCP SDK overload + Zod chain triggers deep type instantiation
+  async ({ token }: { token: string }) => {
     try {
       const normalized = normalizeAccessToken(token);
       if (!normalized) return err('Provided token is empty after normalization.');

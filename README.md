@@ -18,7 +18,7 @@ A TypeScript [Model Context Protocol](https://modelcontextprotocol.io) (MCP) ser
 
 ## Prerequisites
 
-- **Node.js ≥ 18.18** (see `.nvmrc`)
+- **Node.js ≥ 18.18** (`.nvmrc` pins v24.14.1)
 - A Microsoft account with access to OneNote
 
 ## Quick Start
@@ -27,6 +27,7 @@ A TypeScript [Model Context Protocol](https://modelcontextprotocol.io) (MCP) ser
 git clone https://github.com/danosb/onenote-mcp.git
 cd onenote-mcp
 npm install
+npm run build       # compile TypeScript
 npm run auth        # sign in with your Microsoft account
 npm run verify      # confirm the token works
 ```
@@ -41,8 +42,8 @@ Add the server to your AI assistant's MCP config. The server communicates over s
 {
   "mcpServers": {
     "onenote": {
-      "command": "node",
-      "args": ["/absolute/path/to/onenote-mcp/dist/mcp-server.js"]
+      "command": "npx",
+      "args": ["tsx", "/absolute/path/to/onenote-mcp/src/mcp-server.ts"]
     }
   }
 }
@@ -54,14 +55,16 @@ Add the server to your AI assistant's MCP config. The server communicates over s
 {
   "mcpServers": {
     "onenote": {
-      "command": "node",
-      "args": ["/absolute/path/to/onenote-mcp/dist/mcp-server.js"]
+      "command": "npx",
+      "args": ["tsx", "/absolute/path/to/onenote-mcp/src/mcp-server.ts"]
     }
   }
 }
 ```
 
-> **Tip:** For development, use `tsx src/mcp-server.ts` instead of `node dist/mcp-server.js` to skip the build step.
+This runs the TypeScript source directly via `tsx` — no build step needed. If you prefer to use the compiled output instead, run `npm run build` first and use `"command": "node"` with `"args": ["/absolute/path/to/onenote-mcp/dist/mcp-server.js"]`.
+
+After updating your config, restart your AI assistant (e.g. quit and reopen Claude Desktop) so it picks up the new MCP server. You can verify the server is working by asking Claude to list your notebooks.
 
 ## Available MCP Tools
 
