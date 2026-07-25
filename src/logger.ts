@@ -4,5 +4,5 @@
  * All diagnostic logging therefore goes to stderr.
  */
 export function log(...args: unknown[]): void {
-  console.error('[onenote-mcp]', ...args);
+  console.error("[onenote-mcp]", ...args);
 }

@@ -1,182 +1,205 @@
 #!/usr/bin/env node
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
-import { log } from './logger.js';
-import { loadToken, saveToken, normalizeAccessToken } from './token-store.js';
-import { authenticateWithDeviceCode } from './auth.js';
-import { OneNoteClient } from './onenote.js';
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import { log } from "./logger.js";
+import { authenticateWithDeviceCode, acquireTokenSilent, clearCache } from "./auth.js";
+import { OneNoteClient } from "./onenote.js";
 
 // ── Server setup ────────────────────────────────────────────────────────────
 
 const server = new McpServer(
   {
-    name: 'onenote',
-    version: '2.0.0',
-    description: 'MCP server for Microsoft OneNote — read, create, and search pages via Microsoft Graph.',
+    name: "onenote",
+    version: "2.0.0",
+    description: "MCP server for Microsoft OneNote — read, create, and search pages via Microsoft Graph.",
   },
-  { capabilities: { tools: { listChanged: true } } },
+  { capabilities: { tools: { listChanged: true } } }
 );
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function client(): OneNoteClient {
-  return OneNoteClient.fromStoredToken();
+  return OneNoteClient.create();
 }
 
-function ok(text: string) {
-  return { content: [{ type: 'text' as const, text }] };
+type ToolResult = { content: { type: "text"; text: string }[]; isError?: true };
+
+function ok(text: string): ToolResult {
+  return { content: [{ type: "text", text }] };
 }
 
-function err(message: string) {
-  return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true as const };
+function err(message: string): ToolResult {
+  return {
+    content: [{ type: "text", text: `Error: ${message}` }],
+    isError: true,
+  };
+}
+
+/**
+ * Typed wrapper around server.tool() that avoids TS2589.
+ *
+ * The MCP SDK's tool() has deeply nested conditional types for overload
+ * resolution with Zod schemas. TypeScript's type checker intermittently
+ * hits its recursion limit (TS2589) depending on the number of tools and
+ * schema complexity. This wrapper casts through `any` to bypass the deep
+ * inference while keeping Zod runtime validation intact.
+ */
+function defineTool(
+  name: string,
+  description: string,
+  schema: Record<string, z.ZodTypeAny>,
+  handler: (params: Record<string, unknown>) => Promise<ToolResult>
+): void {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  (server as any).tool(name, description, schema, handler);
 }
 
 // ── Tools ───────────────────────────────────────────────────────────────────
 
 server.tool(
-  'authenticate',
-  'Start the Microsoft device-code authentication flow. Follow the on-screen instructions to sign in.',
+  "authenticate",
+  "Start the Microsoft device-code authentication flow. Only needed once — tokens renew automatically after initial sign-in.",
   async () => {
     try {
-      const existing = loadToken();
-      if (existing) {
-        return ok('Already authenticated with a stored access token. Use saveAccessToken to replace it, or delete .access-token.txt to re-authenticate.');
+      // Try silent renewal first — if it works, we're good
+      const token = await acquireTokenSilent();
+      if (token) {
+        return ok("Already authenticated. Tokens renew automatically — no action needed.");
       }
+
+      // Silent failed (no account or refresh token expired) — clear stale cache and re-auth
+      log("Silent renewal failed; clearing stale cache and starting fresh auth.");
+      await clearCache();
       await authenticateWithDeviceCode();
-      return ok('Authentication successful. Token saved.');
+      return ok(
+        "Authentication successful. Tokens will renew automatically — you won't need to sign in again unless you revoke access."
+      );
     } catch (e) {
       return err(`Authentication failed: ${(e as Error).message}`);
     }
-  },
+  }
 );
 
-server.tool(
-  'saveAccessToken',
-  'Manually save a Microsoft Graph access token for later use.',
-  { token: z.string().describe('The access token to save') },
-  // @ts-expect-error — TS2589: MCP SDK overload + Zod chain triggers deep type instantiation
-  async ({ token }: { token: string }) => {
-    try {
-      const normalized = normalizeAccessToken(token);
-      if (!normalized) return err('Provided token is empty after normalization.');
-      saveToken(normalized);
-      return ok('Access token saved successfully.');
-    } catch (e) {
-      return err(`Failed to save token: ${(e as Error).message}`);
-    }
-  },
-);
+server.tool("listNotebooks", "List all OneNote notebooks for the signed-in user.", async () => {
+  try {
+    const notebooks = await client().listNotebooks();
+    return ok(JSON.stringify(notebooks, null, 2));
+  } catch (e) {
+    return err((e as Error).message);
+  }
+});
 
-server.tool(
-  'listNotebooks',
-  'List all OneNote notebooks for the signed-in user.',
-  async () => {
-    try {
-      const notebooks = await client().listNotebooks();
-      return ok(JSON.stringify(notebooks, null, 2));
-    } catch (e) {
-      return err((e as Error).message);
-    }
-  },
-);
-
-server.tool(
-  'getNotebook',
-  'Get details of a specific notebook by its ID.',
-  { notebookId: z.string().min(1).describe('The notebook ID') },
+defineTool(
+  "getNotebook",
+  "Get details of a specific notebook by its ID.",
+  { notebookId: z.string().min(1).describe("The notebook ID") },
   async ({ notebookId }) => {
     try {
-      const notebook = await client().getNotebook(notebookId);
+      const notebook = await client().getNotebook(notebookId as string);
       return ok(JSON.stringify(notebook, null, 2));
     } catch (e) {
       return err((e as Error).message);
     }
-  },
+  }
 );
 
-server.tool(
-  'listSections',
-  'List sections, optionally scoped to a notebook.',
-  { notebookId: z.string().optional().describe('Notebook ID (omit to list all sections)') },
+defineTool(
+  "listSections",
+  "List sections, optionally scoped to a notebook.",
+  {
+    notebookId: z.string().optional().describe("Notebook ID (omit to list all sections)"),
+  },
   async ({ notebookId }) => {
     try {
-      const sections = await client().listSections(notebookId);
+      const sections = await client().listSections(notebookId as string | undefined);
       return ok(JSON.stringify(sections, null, 2));
     } catch (e) {
       return err((e as Error).message);
     }
-  },
+  }
 );
 
-server.tool(
-  'listPages',
-  'List pages, optionally scoped to a section.',
-  { sectionId: z.string().optional().describe('Section ID (omit to list all pages)') },
+defineTool(
+  "listPages",
+  "List pages, optionally scoped to a section.",
+  {
+    sectionId: z.string().optional().describe("Section ID (omit to list all pages)"),
+  },
   async ({ sectionId }) => {
     try {
-      const pages = await client().listPages(sectionId);
+      const pages = await client().listPages(sectionId as string | undefined);
       return ok(JSON.stringify(pages, null, 2));
     } catch (e) {
       return err((e as Error).message);
     }
-  },
+  }
 );
 
-server.tool(
-  'getPage',
-  'Get page content by ID or title search. Returns both HTML and plain text.',
-  { query: z.string().min(1).describe('Page ID or title substring to search for') },
+defineTool(
+  "getPage",
+  "Get page content by ID or title search. Returns both HTML and plain text.",
+  {
+    query: z.string().min(1).describe("Page ID or title substring to search for"),
+  },
   async ({ query }) => {
     try {
       const c = client();
-      const page = await c.findPage(query);
+      const page = await c.findPage(query as string);
       if (!page || !page.id) return err(`No page found matching "${query}".`);
 
       const content = await c.getPageContent(page.id);
-      return ok(JSON.stringify({
-        id: content.id,
-        title: content.title,
-        text: content.text,
-        htmlLength: content.html.length,
-      }, null, 2));
+      return ok(
+        JSON.stringify(
+          {
+            id: content.id,
+            title: content.title,
+            text: content.text,
+            htmlLength: content.html.length,
+          },
+          null,
+          2
+        )
+      );
     } catch (e) {
       return err((e as Error).message);
     }
-  },
+  }
 );
 
-server.tool(
-  'createPage',
-  'Create a new page in a OneNote section.',
+defineTool(
+  "createPage",
+  "Create a new page in a OneNote section.",
   {
-    title: z.string().min(1).describe('Page title'),
-    bodyHtml: z.string().describe('HTML body content for the page'),
-    sectionId: z.string().optional().describe('Section ID (omit to use first available section)'),
+    title: z.string().min(1).describe("Page title"),
+    bodyHtml: z.string().describe("HTML body content for the page"),
+    sectionId: z.string().optional().describe("Section ID (omit to use first available section)"),
   },
   async ({ title, bodyHtml, sectionId }) => {
     try {
-      const page = await client().createPage(title, bodyHtml, sectionId);
+      const page = await client().createPage(title as string, bodyHtml as string, sectionId as string | undefined);
       return ok(JSON.stringify(page, null, 2));
     } catch (e) {
       return err((e as Error).message);
     }
-  },
+  }
 );
 
-server.tool(
-  'searchPages',
-  'Search for pages by title across all notebooks.',
-  { query: z.string().describe('Search term (case-insensitive title substring). Empty string returns all pages.') },
+defineTool(
+  "searchPages",
+  "Search for pages by title across all notebooks.",
+  {
+    query: z.string().describe("Search term (case-insensitive title substring). Empty string returns all pages."),
+  },
   async ({ query }) => {
     try {
-      const pages = await client().searchPages(query);
+      const pages = await client().searchPages(query as string);
       return ok(JSON.stringify(pages, null, 2));
     } catch (e) {
       return err((e as Error).message);
     }
-  },
+  }
 );
 
 // ── Main ────────────────────────────────────────────────────────────────────
@@ -184,10 +207,10 @@ server.tool(
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  log('Server started. Tools: authenticate, saveAccessToken, listNotebooks, getNotebook, listSections, listPages, getPage, createPage, searchPages');
+  log("Server started. Tokens renew automatically via cached refresh token.");
 }
 
 main().catch((e) => {
-  log('Fatal error:', e);
+  log("Fatal error:", e);
   process.exit(1);
 });

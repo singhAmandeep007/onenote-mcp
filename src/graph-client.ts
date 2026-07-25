@@ -1,13 +1,19 @@
-import { Client } from '@microsoft/microsoft-graph-client';
+import { Client } from "@microsoft/microsoft-graph-client";
 
 /**
- * Build a Microsoft Graph client that authenticates every request with a static
- * access token. Uses the middleware-based auth provider (the modern API).
+ * A function that returns a valid access token, refreshing silently if needed.
  */
-export function createGraphClient(token: string): Client {
+export type TokenProvider = () => Promise<string>;
+
+/**
+ * Build a Microsoft Graph client that acquires a fresh token for every request
+ * via the provided token provider. This means expired tokens are automatically
+ * renewed without any user interaction.
+ */
+export function createGraphClient(tokenProvider: TokenProvider): Client {
   return Client.initWithMiddleware({
     authProvider: {
-      getAccessToken: async () => token,
+      getAccessToken: tokenProvider,
     },
   });
 }

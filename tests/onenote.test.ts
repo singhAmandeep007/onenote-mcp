@@ -5,12 +5,12 @@ vi.mock('../src/graph-client.js', () => ({
   createGraphClient: vi.fn(),
 }));
 
-// Mock token-store so OneNoteClient.fromStoredToken works without a file.
-vi.mock('../src/token-store.js', () => ({
-  loadToken: vi.fn(() => 'fake-token'),
-  saveToken: vi.fn(),
-  normalizeAccessToken: vi.fn((v: string) => v?.trim() || null),
-  isLikelyJwt: vi.fn(() => false),
+// Mock auth so OneNoteClient.create works without a real token cache.
+vi.mock('../src/auth.js', () => ({
+  getAccessToken: vi.fn(async () => 'fake-token'),
+  acquireTokenSilent: vi.fn(async () => 'fake-token'),
+  hasCachedAccount: vi.fn(async () => true),
+  clearCache: vi.fn(async () => {}),
 }));
 
 import { createGraphClient } from '../src/graph-client.js';
@@ -31,6 +31,11 @@ function mockGraphClient(responses: Record<string, unknown>) {
   return apiMock;
 }
 
+// Helper: create a client with a fake token provider
+function createTestClient(): OneNoteClient {
+  return new OneNoteClient(async () => 'fake-token');
+}
+
 describe('OneNoteClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,7 +46,7 @@ describe('OneNoteClient', () => {
       const notebooks = [{ id: 'nb1', displayName: 'Work' }];
       mockGraphClient({ '/me/onenote/notebooks': { value: notebooks } });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       const result = await client.listNotebooks();
       expect(result).toEqual(notebooks);
     });
@@ -52,7 +57,7 @@ describe('OneNoteClient', () => {
       const sections = [{ id: 's1', displayName: 'General' }];
       mockGraphClient({ '/me/onenote/sections': { value: sections } });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       const result = await client.listSections();
       expect(result).toEqual(sections);
     });
@@ -63,7 +68,7 @@ describe('OneNoteClient', () => {
         '/me/onenote/notebooks/nb1/sections': { value: sections },
       });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       const result = await client.listSections('nb1');
       expect(result).toEqual(sections);
       expect(apiMock).toHaveBeenCalledWith('/me/onenote/notebooks/nb1/sections');
@@ -78,7 +83,7 @@ describe('OneNoteClient', () => {
       ];
       mockGraphClient({ '/me/onenote/pages': { value: pages } });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       const found = await client.findPage('page-456');
       expect(found?.title).toBe('B');
     });
@@ -87,7 +92,7 @@ describe('OneNoteClient', () => {
       const pages = [{ id: 'p1', title: 'Meeting Notes 2024' }];
       mockGraphClient({ '/me/onenote/pages': { value: pages } });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       const found = await client.findPage('meeting notes');
       expect(found?.id).toBe('p1');
     });
@@ -95,7 +100,7 @@ describe('OneNoteClient', () => {
     it('returns null when nothing matches', async () => {
       mockGraphClient({ '/me/onenote/pages': { value: [] } });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       expect(await client.findPage('nonexistent')).toBeNull();
     });
   });
@@ -109,7 +114,7 @@ describe('OneNoteClient', () => {
       ];
       mockGraphClient({ '/me/onenote/pages': { value: pages } });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       const results = await client.searchPages('alpha');
       expect(results).toHaveLength(2);
       expect(results.map((p) => p.id)).toEqual(['p1', 'p3']);
@@ -119,7 +124,7 @@ describe('OneNoteClient', () => {
       const pages = [{ id: 'p1', title: 'X' }];
       mockGraphClient({ '/me/onenote/pages': { value: pages } });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       expect(await client.searchPages('')).toHaveLength(1);
     });
   });
@@ -132,7 +137,7 @@ describe('OneNoteClient', () => {
         '/me/onenote/sections/sec1/pages': created,
       });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       const page = await client.createPage('Test', '<p>body</p>');
       expect(page).toEqual(created);
       expect(apiMock).toHaveBeenCalledWith('/me/onenote/sections/sec1/pages');
@@ -144,16 +149,16 @@ describe('OneNoteClient', () => {
         '/me/onenote/sections/custom-sec/pages': created,
       });
 
-      const client = new OneNoteClient('fake-token');
+      const client = createTestClient();
       await client.createPage('T', '<p>hi</p>', 'custom-sec');
       expect(apiMock).toHaveBeenCalledWith('/me/onenote/sections/custom-sec/pages');
     });
   });
 
-  describe('fromStoredToken', () => {
-    it('creates a client from the stored token', () => {
+  describe('create', () => {
+    it('creates a client from the MSAL token provider', () => {
       mockGraphClient({});
-      const client = OneNoteClient.fromStoredToken();
+      const client = OneNoteClient.create();
       expect(client).toBeInstanceOf(OneNoteClient);
     });
   });
