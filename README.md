@@ -11,6 +11,12 @@ A TypeScript [Model Context Protocol](https://modelcontextprotocol.io) (MCP) ser
 
 [🚀 https://dev.to/singhamandeep007/i-rewrote-a-onenote-mcp-server-in-typescript-heres-what-i-learned-about-microsoft-graph-auth-5933](https://dev.to/singhamandeep007/i-rewrote-a-onenote-mcp-server-in-typescript-heres-what-i-learned-about-microsoft-graph-auth-5933)
 
+## Diagram
+
+![OAuth Flow](./OAuth%20device-code%20flow.png)
+
+![Request Lifecycle](./request%20lifecycle.png)
+
 ## Features
 
 - **One-time authentication** — sign in once via device-code flow; tokens silently refresh using a stored refresh token (access tokens expire hourly, but this is invisible to you)
